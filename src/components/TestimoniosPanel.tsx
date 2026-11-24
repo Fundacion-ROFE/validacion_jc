@@ -10,6 +10,8 @@ import type { ComentarioVista, FilaTestimonio } from "@/lib/testimonios/vista";
 import { soloActivos, visiblesSegunFiltro } from "@/lib/activo";
 import AppShell from "./AppShell";
 import { EtiquetaInactivo, FiltroInactivos, estilosInactivos as si, paramInactivos } from "./Inactivos";
+import { tieneSedes, ubicacion } from "@/lib/sede";
+import { SelectorSede } from "./Sede";
 import m from "./MonitorPanel.module.css";
 import t from "./TestimoniosPanel.module.css";
 
@@ -93,6 +95,7 @@ export default function TestimoniosPanel({ user, inicial }: { user: SessionUser;
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const verTodas = puede(user.rol, "ver_todas_las_ciudades");
   const puedeComentar = puede(user.rol, "testimonios_comentar");
+  const asignaSede = puede(user.rol, "estudiantes_sede");
 
   async function cargar(silencioso = false) {
     if (!silencioso) setLoadErr(false);
@@ -281,7 +284,7 @@ export default function TestimoniosPanel({ user, inicial }: { user: SessionUser;
                   <i className={`${t.dot} ${t.mobileDot}`} style={{ background: st.dot }} />
                   <div className={t.whoText}>
                     <div className={t.name}>{f.nombre} <EtiquetaInactivo info={f.inactivo} /></div>
-                    <div className={t.doc}>{f.documento} · {f.ciudad}{f.ciudadOriginal ? <span className={t.alias}> ({f.ciudadOriginal})</span> : null}</div>
+                    <div className={t.doc}>{f.documento} · {ubicacion(f.ciudad, f.sede)}{!f.sede && tieneSedes(f.ciudad) ? " · Sin sede" : ""}{f.ciudadOriginal ? <span className={t.alias}> ({f.ciudadOriginal})</span> : null}</div>
                   </div>
                 </div>
                 <div className={t.contact}>
@@ -330,6 +333,10 @@ export default function TestimoniosPanel({ user, inicial }: { user: SessionUser;
               </dd>
               <dt>Documento</dt><dd>{abierta.documento}</dd>
               <dt>Ciudad</dt><dd>{abierta.ciudad}{abierta.ciudadOriginal ? ` (escrita como "${abierta.ciudadOriginal}")` : ""}</dd>
+              {tieneSedes(abierta.ciudad) && <><dt>Sede</dt><dd>
+                <SelectorSede documento={abierta.documento} ciudad={abierta.ciudad} sede={abierta.sede} puedeAsignar={asignaSede}
+                  onGuardada={(x) => { setFilas((fs) => fs && fs.map((f) => (f.id === abierta.id ? { ...f, sede: x } : f))); aviso(x ? `Sede: ${x} ✓` : "Sede quitada", true); }} />
+              </dd></>}
               <dt>Celular</dt><dd>{abierta.celular ? celularConIndicativo(abierta.celular, abierta.ciudad) : "—"}</dd>
               <dt>Correo</dt><dd>{abierta.correo || "—"}</dd>
             </dl>

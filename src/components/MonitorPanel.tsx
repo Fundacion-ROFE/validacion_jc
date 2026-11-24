@@ -11,6 +11,8 @@ import { compararFilas } from "@/lib/orden";
 import { soloActivos, visiblesSegunFiltro } from "@/lib/activo";
 import { DialogoActivo, EtiquetaInactivo, FiltroInactivos, estilosInactivos as si, paramInactivos, type Persona } from "./Inactivos";
 import AppShell from "./AppShell";
+import { DialogoSede, estilosSede as sd } from "./Sede";
+import { tieneSedes } from "@/lib/sede";
 import MenuFila from "./MenuFila";
 import s from "./MonitorPanel.module.css";
 
@@ -45,13 +47,13 @@ function fecha(iso: string | null): string {
 }
 
 // ----- Historial (coordinación y administración) -----
-type HistItem = { campo: "nombre" | "correo" | "estado" | "documento" | "ciudad" | "grupo" | "activo"; anterior: string; nuevo: string; actor: { rol: string; usuario?: string }; accion: string; fecha: string; motivo?: string };
+type HistItem = { campo: "nombre" | "correo" | "estado" | "documento" | "ciudad" | "grupo" | "activo" | "sede"; anterior: string; nuevo: string; actor: { rol: string; usuario?: string }; accion: string; fecha: string; motivo?: string };
 const ACCION_TXT: Record<string, string> = {
   confirmar: "Confirmó sus datos", corregir: "Envió una corrección", aprobar: "Aprobó la corrección",
   editar: "Corrigió los datos", validar_en_nombre: "Validó por el estudiante", importar: "Actualizado desde la lista",
-  editar_admin: "Editó el registro", inactivar: "Lo inactivó", activar: "Lo reactivó",
+  editar_admin: "Editó el registro", inactivar: "Lo inactivó", activar: "Lo reactivó", asignar_sede: "Asignó la sede",
 };
-const CAMPO_TXT: Record<HistItem["campo"], string> = { nombre: "Nombre", correo: "Correo", estado: "Estado", documento: "Documento", ciudad: "Ciudad", grupo: "Grupo", activo: "Estado" };
+const CAMPO_TXT: Record<HistItem["campo"], string> = { nombre: "Nombre", correo: "Correo", estado: "Estado", documento: "Documento", ciudad: "Ciudad", grupo: "Grupo", activo: "Estado", sede: "Sede" };
 const actorTxt = (a: HistItem["actor"]) => (a.rol === "estudiante" ? "El estudiante" : `${ROL_TXT[a.rol as RolUsuario] ?? "Monitor"} · ${a.usuario ?? ""}`);
 
 /** Edición completa (solo administración). */
@@ -110,6 +112,8 @@ export default function MonitorPanel({ user, appUrl, inicial }: { user: SessionU
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [dlgActivo, setDlgActivo] = useState<Persona | null>(null);
   const [menu, setMenu] = useState<string | null>(null); // fila con el menú "⋯" abierto
+  const asignaSede = puede(user.rol, "estudiantes_sede");
+  const [dlgSede, setDlgSede] = useState<MonitorRow | null>(null);
   const [descargando, setDescargando] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -209,6 +213,8 @@ export default function MonitorPanel({ user, appUrl, inicial }: { user: SessionU
   // Los inactivos NO cuentan en totales ni porcentajes; solo se ven con "Mostrar inactivos".
   const activosCiudad = useMemo(() => soloActivos(enCiudad), [enCiudad]);
   const nInactivos = enCiudad.length - activosCiudad.length;
+  // Personas activas de ciudades con sedes (Uruguay) que todavía no tienen sede: se asignan en "Sedes".
+  const sinSede = useMemo(() => activosCiudad.filter((r) => tieneSedes(r.ciudad) && !r.sede).length, [activosCiudad]);
   const cnt = useMemo(() => {
     const c = { validado: 0, corregido: 0, pendiente: 0 };
     for (const r of activosCiudad) c[r.estado]++;
@@ -341,6 +347,9 @@ export default function MonitorPanel({ user, appUrl, inicial }: { user: SessionU
           <span className={s.searchIcon} aria-hidden />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre, correo o documento" aria-label="Buscar" />
         </label>
+        {asignaSede && sinSede > 0 && (
+          <a href="/sedes" className={sd.faltan} style={{ display: "block", textDecoration: "none" }}>{sinSede} de Uruguay sin sede · Asignarlas en “Sedes” →</a>
+        )}
         {(nInactivos > 0 || mostrarInactivos) && (
           <div style={{ margin: "10px 0 4px" }}><FiltroInactivos valor={mostrarInactivos} onCambio={setMostrarInactivos} cuantos={nInactivos} /></div>
         )}
@@ -371,7 +380,7 @@ export default function MonitorPanel({ user, appUrl, inicial }: { user: SessionU
                     <i className={`${s.dot} ${s.rowMobileDot}`} style={{ background: st.dot }} />
                     <div className={s.whoText}>
                       <div className={s.name}>{nombreVisible} <EtiquetaInactivo info={r.inactivo} /></div>
-                      <div className={s.doc}>{r.documento}{ciudades.length > 1 && !ciudad ? ` · ${r.ciudad}` : ""}</div>
+                      <div className={s.doc}>{r.documento}{ciudades.length > 1 && !ciudad ? ` · ${r.ubicacion}` : r.sede ? ` · ${r.sede}` : ""}{!r.sede && tieneSedes(r.ciudad) ? " · Sin sede" : ""}</div>
                     </div>
                   </div>
                   <div className={s.email}>{correoVisible || "(sin correo)"}</div>
@@ -401,6 +410,7 @@ export default function MonitorPanel({ user, appUrl, inicial }: { user: SessionU
                         ...(r.estado === "validado" ? [{ label: "Corregir datos", on: () => abrir(r, "editar") }] : []),
                         ...(verHist ? [{ label: "Historial", on: () => verHistorial(r) }] : []),
                         ...(editarTodo ? [{ label: "Editar datos", on: () => abrirEdicion(r) }] : []),
+                        ...(asignaSede && tieneSedes(r.ciudad) ? [{ label: r.sede ? "Cambiar sede" : "Asignar sede", on: () => setDlgSede(r) }] : []),
                         ...(cambiarActivo ? [{ label: r.inactivo ? "Reactivar" : "Inactivar", on: () => setDlgActivo({ documento: r.documento, nombre: nombreVisible, inactivo: r.inactivo }) }] : []),
                       ]}
                     />
@@ -532,7 +542,7 @@ export default function MonitorPanel({ user, appUrl, inicial }: { user: SessionU
           <div className={s.modal} role="dialog" aria-modal="true" aria-labelledby="hist-title">
             <div id="hist-title" className={s.modalTitle}>Historial de cambios</div>
             <div className={s.histWho}>
-              {historial.row.nombrePropuesto ?? historial.row.nombre} · <span className={s.doc}>{historial.row.documento}</span> · {historial.row.ciudad}
+              {historial.row.nombrePropuesto ?? historial.row.nombre} · <span className={s.doc}>{historial.row.documento}</span> · {historial.row.ubicacion}
             </div>
             {historial.error && <div className="msg-error">No pudimos cargar el historial.</div>}
             {!historial.items && !historial.error && <div className={s.skeleton}><i /><i style={{ width: "70%" }} /><i /></div>}
@@ -546,7 +556,9 @@ export default function MonitorPanel({ user, appUrl, inicial }: { user: SessionU
                     {g.cambios.map((c, i) => (
                       <div key={i} className={s.histChange}>
                         <span className={s.histField}>{CAMPO_TXT[c.campo]}</span>
-                        {c.campo === "activo" ? (
+                        {c.campo === "sede" ? (
+                          <>{c.anterior || "Sin sede"} → <b>{c.nuevo || "Sin sede"}</b></>
+                        ) : c.campo === "activo" ? (
                           <>{c.anterior === "inactivo" ? "Inactivo" : "Activo"} → <b>{c.nuevo === "inactivo" ? "Inactivo" : "Activo"}</b>{c.motivo ? <> · Motivo: {c.motivo}</> : null}</>
                         ) : c.campo === "estado" ? (
                           <>{STY[c.anterior as Estado]?.label ?? c.anterior} → <b>{STY[c.nuevo as Estado]?.label ?? c.nuevo}</b></>
@@ -564,6 +576,11 @@ export default function MonitorPanel({ user, appUrl, inicial }: { user: SessionU
             </div>
           </div>
         </div>
+      )}
+
+      {dlgSede && (
+        <DialogoSede persona={{ documento: dlgSede.documento, nombre: dlgSede.nombrePropuesto ?? dlgSede.nombre, ciudad: dlgSede.ciudad, sede: dlgSede.sede }} onCerrar={() => setDlgSede(null)}
+          onListo={(x) => { setDlgSede(null); cargar(true); showToast(x ? `Sede: ${x} ✓` : "Sede quitada", true); }} />
       )}
 
       {dlgActivo && (

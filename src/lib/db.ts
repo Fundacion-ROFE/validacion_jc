@@ -57,4 +57,7 @@ async function ensureIndexes(db: Db) {
 /** Para scripts: cierra la conexión al terminar. */
 export async function closeDb() {
   if (globalThis._mongoClientPromise) await (await globalThis._mongoClientPromise).close();
+  // Sin la conexión cerrada en caché: un script puede volver a llamar a getDb() después (p. ej. la semilla local).
+  globalThis._mongoClientPromise = undefined;
+  globalThis._indexesReady = undefined;
 }

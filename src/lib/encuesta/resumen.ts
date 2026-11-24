@@ -2,12 +2,14 @@
 import { soloActivos } from "@/lib/activo";
 import type { SessionUser } from "@/lib/auth";
 import { puede } from "@/lib/permisos";
+import { desglosarSedes, type DesgloseSede } from "@/lib/sede";
 import { monitoresPorCiudad } from "@/lib/testimonios/usuarios-lectura";
 import { contarSinCoincidencia, filasEncuesta, type FilaEncuesta } from "./vista";
 
 /** total = respondio + pendiente (faltan). conComentarios: pendientes que ya tienen comentarios (≤ pendiente). */
 export type ConteoEncuesta = { total: number; respondio: number; pendiente: number; conComentarios: number };
-export type CiudadEncuesta = ConteoEncuesta & { ciudad: string; monitores: string[] };
+/** sedes: solo en ciudades con sedes (Uruguay): desglose informativo; los totales de la ciudad no cambian. */
+export type CiudadEncuesta = ConteoEncuesta & { ciudad: string; monitores: string[]; sedes?: DesgloseSede[] };
 export type ResumenEncuesta = { total: ConteoEncuesta; ciudades: CiudadEncuesta[]; sinCoincidencia: number | null; actualizado: string };
 
 const vacio = (): ConteoEncuesta => ({ total: 0, respondio: 0, pendiente: 0, conComentarios: 0 });
@@ -20,7 +22,7 @@ function sumar(c: ConteoEncuesta, f: Pick<FilaEncuesta, "estado" | "conComentari
 }
 
 /** Conteos por ciudad, de menor a mayor avance (a igual avance, alfabético). Los inactivos no cuentan. Función pura. */
-export function contarEncuestaPorCiudad(filas: (Pick<FilaEncuesta, "ciudad" | "estado" | "conComentarios"> & Partial<Pick<FilaEncuesta, "inactivo">>)[], monitores = new Map<string, string[]>()): { total: ConteoEncuesta; ciudades: CiudadEncuesta[] } {
+export function contarEncuestaPorCiudad(filas: (Pick<FilaEncuesta, "ciudad" | "estado" | "conComentarios"> & Partial<Pick<FilaEncuesta, "inactivo" | "sede">>)[], monitores = new Map<string, string[]>()): { total: ConteoEncuesta; ciudades: CiudadEncuesta[] } {
   const total = vacio();
   const por = new Map<string, CiudadEncuesta>();
   for (const f of soloActivos(filas)) {
@@ -28,6 +30,11 @@ export function contarEncuestaPorCiudad(filas: (Pick<FilaEncuesta, "ciudad" | "e
     sumar(c, f);
     sumar(total, f);
     por.set(f.ciudad, c);
+  }
+  const activas = soloActivos(filas);
+  for (const c of por.values()) {
+    const d = desglosarSedes(c.ciudad, activas.filter((f) => f.ciudad === c.ciudad), (f) => f.estado === "respondio");
+    if (d) c.sedes = d;
   }
   const ciudades = [...por.values()].sort((a, b) => avance(a) - avance(b) || a.ciudad.localeCompare(b.ciudad, "es"));
   return { total, ciudades };

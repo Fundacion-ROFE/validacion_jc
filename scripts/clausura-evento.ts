@@ -14,6 +14,7 @@ import { ObjectId } from "mongodb";
 import { closeDb, dbHost, dbName } from "@/lib/db";
 import { clausura, type Evento } from "@/lib/clausura/db";
 import { completarEjemplo, datosDesdeArchivo, EventoArchivo, mismaCiudad, pendientesDe, POR_DEFINIR, revisarEventoArchivo } from "@/lib/clausura/evento";
+import { leerCobertura, seSolapan } from "@/lib/sede";
 import { sinComentarios } from "@/lib/clausura/jsonc";
 import { mismoFormulario, usadosEn, validarCambioFormulario, validarFormulario } from "@/lib/clausura/formulario/motor";
 
@@ -82,6 +83,12 @@ async function main() {
   // Ciudades: deben existir en students (valor exacto), si no, nadie de esa ciudad encontrará el evento.
   const existentes = (await estudiantes.distinct("ciudad")) as string[];
   for (const c of e.ciudades) {
+    // "Uruguay · Colonia": cuenta solo a quienes tienen esa sede.
+    const cob = leerCobertura(c);
+    if (cob.sede && existentes.includes(cob.ciudad)) {
+      console.log(`  Estudiantes de ${c}: ${await estudiantes.countDocuments({ ciudad: cob.ciudad, sede: cob.sede })}`);
+      continue;
+    }
     if (existentes.includes(c)) {
       console.log(`  Estudiantes de ${c}: ${await estudiantes.countDocuments({ ciudad: c })}`);
       continue;
@@ -136,7 +143,7 @@ async function main() {
 
   async function revisarChoque(slug: string, ciudades: string[]) {
     const otros = await eventos.find({ estado: "abierto", slug: { $ne: slug } }, { projection: { slug: 1, ciudades: 1 } }).toArray();
-    const choque = otros.find((o) => o.ciudades.some((c) => ciudades.some((x) => mismaCiudad(c, x))));
+    const choque = otros.find((o) => seSolapan(o.ciudades, ciudades));
     if (choque) fallar(`Ya hay otro evento abierto para esa ciudad: "${choque.slug}". Ciérralo primero (--slug=${choque.slug} --estado=cerrado).`);
   }
 }

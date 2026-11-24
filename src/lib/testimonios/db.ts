@@ -3,7 +3,7 @@
 // La lectura del usuario de la sesión se hace con getCurrentUser() de @/lib/auth, sin cambios.
 import type { Db, ObjectId } from "mongodb";
 import { getDb } from "@/lib/db";
-import type { DatosActivo } from "@/lib/types";
+import type { DatosActivo, DatosSede } from "@/lib/types";
 
 export const COLECCIONES = {
   participantes: "testimonios_participantes",
@@ -26,7 +26,7 @@ export type Participante = {
   ciudadOriginal?: string | null;
   creadoEn: Date;
   actualizadoEn: Date;
-} & DatosActivo;
+} & DatosActivo & DatosSede;
 
 export type Cruce = "auto" | "manual" | "sin_duenio" | "conflicto" | "descartada";
 

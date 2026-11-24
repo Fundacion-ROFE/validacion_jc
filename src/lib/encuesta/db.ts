@@ -30,7 +30,7 @@ export type ComentarioEncuesta = {
 };
 
 /** Participante con solo lo que este módulo lee. */
-export type ParticipanteLectura = Pick<Participante, "_id" | "documento" | "nombre" | "correo" | "celular" | "ciudad" | "ciudadOriginal" | "activo" | "inactivoMotivo" | "inactivoEn" | "inactivoPor">;
+export type ParticipanteLectura = Pick<Participante, "_id" | "documento" | "nombre" | "correo" | "celular" | "ciudad" | "ciudadOriginal" | "sede" | "activo" | "inactivoMotivo" | "inactivoEn" | "inactivoPor">;
 
 declare global {
   var _encuestaIndices: Promise<void> | undefined;

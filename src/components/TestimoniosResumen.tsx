@@ -6,6 +6,7 @@ import type { ResumenTestimonios } from "@/lib/testimonios/resumen";
 import AppShell from "./AppShell";
 import { descargarPendientesTestimonios } from "./TestimoniosPanel";
 import { IncluirInactivos } from "./Inactivos";
+import { DesgloseSedes } from "./Sede";
 import s from "./AdminOverview.module.css";
 
 type Descarga = { estado: "idle" } | { estado: "loading" } | { estado: "done"; archivo: string; filas: number } | { estado: "error" };
@@ -131,7 +132,7 @@ export default function TestimoniosResumen({ user }: { user: SessionUser }) {
         const p = pct(c.realizado, c.total);
         return (
           <a key={c.ciudad} className={s.city} href={`/testimonios?ciudad=${encodeURIComponent(c.ciudad)}`} title={`Ver testimonios de ${c.ciudad}`}>
-            <div className={s.cName}>{c.ciudad}</div>
+            <div className={s.cName}>{c.ciudad}<DesgloseSedes sedes={c.sedes} detalle={(x) => `(${x.total ? Math.round((x.completados / x.total) * 100) : 0}%)`} /></div>
             <div className={s.cBar} aria-hidden>
               <i style={{ width: `${p}%`, background: colorAvance(p) }} />
             </div>

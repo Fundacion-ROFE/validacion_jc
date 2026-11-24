@@ -92,6 +92,7 @@ describe("matriz de permisos", () => {
     clausura_gestionar: [false, false, true],
     // Fase 8: inactivar y reactivar estudiantes, solo admin. Todos ven la etiqueta y el filtro.
     estudiantes_activo: [false, false, true],
+    estudiantes_sede: [true, true, true],
   };
   for (const [permiso, esperado] of Object.entries(tabla))
     it(permiso, () => expect(ROLES.map((r) => puede(r, permiso as Permiso))).toEqual(esperado));

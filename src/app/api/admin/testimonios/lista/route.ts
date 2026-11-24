@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { exigir, sameOrigin } from "@/lib/auth";
 import { inactivosEnStudents } from "@/lib/estudiantes-activo";
+import { sedesEnStudents } from "@/lib/estudiantes-sede";
 import { readRowsFromBuffer } from "@/lib/excel";
 import { aplicarLista, vistaPreviaLista } from "@/lib/testimonios/lista-aplicar";
 
@@ -41,6 +42,6 @@ export async function POST(req: Request) {
   try { ids = JSON.parse(String(form!.get("eliminar") ?? "[]")); } catch { ids = null; }
   const eliminar = Eliminar.safeParse(ids);
   if (!eliminar.success) return NextResponse.json({ error: "datos_invalidos" }, { status: 400 });
-  const r = await aplicarLista(rows, eliminar.data, g.user.usuario, inactivos);
+  const r = await aplicarLista(rows, eliminar.data, g.user.usuario, inactivos, await sedesEnStudents());
   return NextResponse.json({ resultado: { insertados: r.insertados, inactivos: r.inactivos, actualizados: r.actualizados, eliminados: r.eliminados, recruzadas: r.recruzadas } });
 }

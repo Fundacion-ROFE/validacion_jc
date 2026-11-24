@@ -25,7 +25,17 @@ export type Student = {
   validadoEn?: Date;
   creadoEn: Date;
   actualizadoEn: Date;
-} & DatosActivo;
+} & DatosActivo & DatosSede;
+
+/**
+ * Sede dentro de la ciudad (p. ej. Uruguay → "Colonia"), en students y testimonios_participantes. Ver src/lib/sede.ts.
+ * Sin migración: sin el campo = sin sede (como antes). sedeAsignada*: quién y cuándo la asignó o la quitó por última vez.
+ */
+export type DatosSede = {
+  sede?: string;
+  sedeAsignadaEn?: Date;
+  sedeAsignadaPor?: { usuario: string; nombre: string; rol: string };
+};
 
 /**
  * Estado activo/inactivo (students y testimonios_participantes). Sin migración: sin el campo = activo.
@@ -58,13 +68,13 @@ export type ChangeLog = {
   _id?: ObjectId;
   studentId: ObjectId;
   documento: string;
-  campo: "nombre" | "correo" | "estado" | "documento" | "ciudad" | "grupo" | "activo";
+  campo: "nombre" | "correo" | "estado" | "documento" | "ciudad" | "grupo" | "activo" | "sede";
   anterior: string;
   nuevo: string;
   actor: Actor;
   /** Solo al inactivar: por qué. */
   motivo?: string;
-  accion: "confirmar" | "corregir" | "aprobar" | "editar" | "validar_en_nombre" | "importar" | "eliminar" | "editar_admin" | "inactivar" | "activar";
+  accion: "confirmar" | "corregir" | "aprobar" | "editar" | "validar_en_nombre" | "importar" | "eliminar" | "editar_admin" | "inactivar" | "activar" | "asignar_sede";
   fecha: Date;
 };
 

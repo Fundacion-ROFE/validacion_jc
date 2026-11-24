@@ -30,7 +30,8 @@ export type ResultadoLista = { insertados: number; inactivos: number; actualizad
  * que sigan ausentes y estén marcados. Sus comentarios y respuestas se conservan (las respuestas
  * se vuelven a cruzar: si nadie más coincide, quedan en "Sin dueño").
  */
-export async function aplicarLista(rows: Record<string, string>[], eliminarIds: string[], por: string, inactivos: Inactivos = new Map()): Promise<ResultadoLista & { plan: PlanLista }> {
+/** sedes: documento → sede ya asignada en students; los participantes NUEVOS nacen con esa sede (un solo dato por persona). */
+export async function aplicarLista(rows: Record<string, string>[], eliminarIds: string[], por: string, inactivos: Inactivos = new Map(), sedes: ReadonlyMap<string, string> = new Map()): Promise<ResultadoLista & { plan: PlanLista }> {
   const { participantes, auditoria } = await testimonios();
   const plan = planificarLista(rows, await participantes.find({}).toArray(), inactivos);
   const now = new Date();
@@ -39,10 +40,12 @@ export async function aplicarLista(rows: Record<string, string>[], eliminarIds: 
     const docs = plan.nuevos.map((f): Participante => {
       // Si el documento ya está inactivo en students, el participante nace inactivo con el mismo motivo, fecha y autor.
       const h = inactivos.get(f.documento);
+      const sede = sedes.get(f.documento);
       return {
         _id: new ObjectId(), documento: f.documento, nombres: f.nombres, apellidos: f.apellidos, nombre: f.nombre,
         celular: f.celular, celularClave: f.celularClave, correo: f.correo, ciudad: f.ciudad, ciudadOriginal: f.ciudadOriginal,
         creadoEn: now, actualizadoEn: now,
+        ...(sede ? { sede } : {}),
         ...(h ? { activo: false, inactivoMotivo: h.inactivoMotivo, inactivoEn: h.inactivoEn, ...(h.inactivoPor ? { inactivoPor: h.inactivoPor } : {}) } : {}),
       };
     });

@@ -6,7 +6,7 @@ import { celularConIndicativo } from "./celular";
 import { ultimaActividad } from "./estado";
 import type { FilaTestimonio } from "./vista";
 
-export type FilaPendienteTestimonio = { nombre: string; celular: string; correo: string; documento: string; ciudad: string; conComentarios: "Sí" | "No"; ultimoComentario: string };
+export type FilaPendienteTestimonio = { nombre: string; celular: string; correo: string; documento: string; ciudad: string; conComentarios: "Sí" | "No"; ultimoComentario: string; sede: string };
 
 /**
  * "26/10/2026 8:00 a. m. · Coordinadora Demo: Confirmó que lo envía hoy." (hora de Colombia).
@@ -27,6 +27,7 @@ export function pendientesParaExportar(filas: FilaTestimonio[], ciudad?: string,
       return {
         nombre: f.nombre, celular: celularConIndicativo(f.celular, f.ciudad), correo: f.correo, documento: f.documento, ciudad: f.ciudad,
         conComentarios: f.conComentarios ? "Sí" : "No", ultimoComentario: ua ? textoComentario(f.comentarios[ua.indice], ua.editado) : "",
+        sede: f.sede ?? "",
       };
     })
     .sort((a, b) => a.ciudad.localeCompare(b.ciudad, "es") || (a.conComentarios === b.conComentarios ? 0 : a.conComentarios === "No" ? -1 : 1) || a.nombre.localeCompare(b.nombre, "es"));
@@ -43,6 +44,8 @@ export async function excelPendientesTestimonios(filas: FilaPendienteTestimonio[
     { header: "Ciudad", key: "ciudad", width: 20 },
     { header: "Con comentarios", key: "conComentarios", width: 16 },
     { header: "Último comentario", key: "ultimoComentario", width: 70 },
+    // Al final, para no correr las columnas de antes. Vacía si la persona no tiene sede.
+    { header: "Sede", key: "sede", width: 14 },
   ];
   ws.getRow(1).font = { bold: true };
   ws.views = [{ state: "frozen", ySplit: 1 }];

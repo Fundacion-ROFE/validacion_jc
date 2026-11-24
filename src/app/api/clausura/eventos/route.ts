@@ -6,6 +6,7 @@ import { crearEvento, datosParaEditar, NuevoEvento } from "@/lib/clausura/gestio
 import { eventosVisibles } from "@/lib/clausura/panel";
 import { leerCuerpo } from "@/lib/clausura/rutas";
 import { puede } from "@/lib/permisos";
+import { opcionesCobertura } from "@/lib/sede";
 
 const espacios = (t: string) => t.replace(/[  ]/g, " ");
 
@@ -33,7 +34,8 @@ export async function GET() {
       ...(admin ? { datos: datosParaEditar(e) } : {}),
     };
   });
-  const ciudades = admin ? ((await estudiantes.distinct("ciudad")) as string[]).sort((a, b) => a.localeCompare(b, "es")) : [];
+  // Cada ciudad de students y, si tiene sedes, "Ciudad · Sede" (p. ej. "Uruguay · Colonia").
+  const ciudades = admin ? opcionesCobertura(((await estudiantes.distinct("ciudad")) as string[]).sort((a, b) => a.localeCompare(b, "es"))) : [];
   return NextResponse.json({ eventos: filas, ciudades, puedeGestionar: admin });
 }
 

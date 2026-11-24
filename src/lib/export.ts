@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import type { Collection } from "mongodb";
 import { filtroActivos } from "./activo";
+import { sedeDe } from "./sede";
 import type { Student } from "./types";
 
 // Excel final para certificados, con dos pestañas cruzables por ID (documento):
@@ -8,8 +9,9 @@ import type { Student } from "./types";
 //  - "Datos validados": solo los validados, con su nombre y correo definitivos.
 // Lo usan el botón de la administración y el script `npm run export`. Solo lectura.
 
-export type FilaOriginal = { id: string; nombre: string; email: string; ciudad: string };
-export type FilaValidada = { id: string; nombre: string; ciudad: string; correo: string };
+/** sede: "" si no tiene (Uruguay → Colonia / Paysandú). Va en la última columna para no correr las de antes. */
+export type FilaOriginal = { id: string; nombre: string; email: string; ciudad: string; sede: string };
+export type FilaValidada = { id: string; nombre: string; ciudad: string; correo: string; sede: string };
 export type DatosCertificados = { originales: FilaOriginal[]; validados: FilaValidada[] };
 
 const porCiudadYNombre = (a: { ciudad: string; nombre: string }, b: { ciudad: string; nombre: string }) =>
@@ -24,16 +26,16 @@ export async function datosCertificados(students: Collection<Student>, opciones:
   const { soloValidados = true, ciudad, incluirInactivos = false } = opciones;
   const docs = await students
     .find({ ...(ciudad ? { ciudad } : {}), ...filtroActivos(incluirInactivos) }, {
-      projection: { documento: 1, ciudad: 1, estado: 1, nombre: 1, correo: 1, nombreOriginal: 1, correoOriginal: 1, nombrePropuesto: 1, correoPropuesto: 1 },
+      projection: { documento: 1, ciudad: 1, sede: 1, estado: 1, nombre: 1, correo: 1, nombreOriginal: 1, correoOriginal: 1, nombrePropuesto: 1, correoPropuesto: 1 },
     })
     .toArray();
 
   const originales = docs
-    .map((s) => ({ id: s.documento, nombre: s.nombreOriginal ?? "", email: s.correoOriginal ?? "", ciudad: s.ciudad }))
+    .map((s) => ({ id: s.documento, nombre: s.nombreOriginal ?? "", email: s.correoOriginal ?? "", ciudad: s.ciudad, sede: sedeDe(s) ?? "" }))
     .sort(porCiudadYNombre);
   const validados = docs
     .filter((s) => !soloValidados || s.estado === "validado")
-    .map((s) => ({ id: s.documento, nombre: s.nombrePropuesto ?? s.nombre, ciudad: s.ciudad, correo: s.correoPropuesto ?? s.correo }))
+    .map((s) => ({ id: s.documento, nombre: s.nombrePropuesto ?? s.nombre, ciudad: s.ciudad, correo: s.correoPropuesto ?? s.correo, sede: sedeDe(s) ?? "" }))
     .sort(porCiudadYNombre);
   return { originales, validados };
 }
@@ -47,6 +49,7 @@ export async function excelCertificados({ originales, validados }: DatosCertific
     { header: "Nombre completo", key: "nombre", width: 42 },
     { header: "Email", key: "email", width: 40 },
     { header: "Ciudad", key: "ciudad", width: 22 },
+    { header: "Sede", key: "sede", width: 14 },
   ];
   wsO.addRows(originales);
 
@@ -56,6 +59,7 @@ export async function excelCertificados({ originales, validados }: DatosCertific
     { header: "Nombre completo validado", key: "nombre", width: 42 },
     { header: "Ciudad", key: "ciudad", width: 22 },
     { header: "Correo nuevo", key: "correo", width: 40 },
+    { header: "Sede", key: "sede", width: 14 },
   ];
   wsV.addRows(validados);
 
@@ -70,15 +74,15 @@ export async function excelCertificados({ originales, validados }: DatosCertific
 
 // ----- Pendientes (solo administración): para hacerles seguimiento -----
 
-export type FilaPendiente = { nombre: string; correo: string; documento: string; ciudad: string };
+export type FilaPendiente = { nombre: string; correo: string; documento: string; ciudad: string; sede: string };
 
 /** Estudiantes en estado pendiente, opcionalmente de una sola ciudad. Sin inactivos salvo que se pidan. Solo lectura. */
 export async function filasPendientes(students: Collection<Student>, ciudad?: string, incluirInactivos = false): Promise<FilaPendiente[]> {
   const docs = await students
-    .find({ estado: "pendiente", ...(ciudad ? { ciudad } : {}), ...filtroActivos(incluirInactivos) }, { projection: { nombre: 1, correo: 1, documento: 1, ciudad: 1 } })
+    .find({ estado: "pendiente", ...(ciudad ? { ciudad } : {}), ...filtroActivos(incluirInactivos) }, { projection: { nombre: 1, correo: 1, documento: 1, ciudad: 1, sede: 1 } })
     .toArray();
   return docs
-    .map((s) => ({ nombre: s.nombre, correo: s.correo, documento: s.documento, ciudad: s.ciudad }))
+    .map((s) => ({ nombre: s.nombre, correo: s.correo, documento: s.documento, ciudad: s.ciudad, sede: sedeDe(s) ?? "" }))
     .sort((a, b) => a.ciudad.localeCompare(b.ciudad, "es") || a.nombre.localeCompare(b.nombre, "es"));
 }
 
@@ -90,6 +94,7 @@ export async function excelPendientes(filas: FilaPendiente[]): Promise<Buffer> {
     { header: "Correo", key: "correo", width: 40 },
     { header: "Documento", key: "documento", width: 18 },
     { header: "Ciudad", key: "ciudad", width: 22 },
+    { header: "Sede", key: "sede", width: 14 },
   ];
   ws.getRow(1).font = { bold: true };
   ws.views = [{ state: "frozen", ySplit: 1 }];

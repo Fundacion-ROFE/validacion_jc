@@ -39,6 +39,6 @@ export async function POST(req: Request) {
   try { ids = JSON.parse(String(form!.get("eliminar") ?? "[]")); } catch { ids = null; }
   const eliminar = Eliminar.safeParse(ids);
   if (!eliminar.success) return NextResponse.json({ error: "datos_invalidos" }, { status: 400 });
-  const r = await aplicar(rows, eliminar.data, { rol: "admin", usuario: user.usuario });
-  return NextResponse.json({ resultado: { insertados: r.insertados, actualizados: r.actualizados, eliminados: r.eliminados, protegidos: r.protegidos } });
+  const r = await aplicar(rows, eliminar.data, { rol: "admin", usuario: user.usuario }, user);
+  return NextResponse.json({ resultado: { insertados: r.insertados, actualizados: r.actualizados, eliminados: r.eliminados, protegidos: r.protegidos, sedes: r.sedes } });
 }

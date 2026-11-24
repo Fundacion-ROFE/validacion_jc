@@ -10,12 +10,13 @@ import { normalizeDocumento } from "@/lib/validation/name";
 import { GENEROS, ocultarCelular, ocultarCorreo, validarTelefono } from "./contacto";
 import { clausura, type Contacto, type Evento, type RespuestaClausura } from "./db";
 import { aceptaRespuestas, asistira, eventoParaCiudad, eventoVista, formularioActivo } from "./evento";
+import { cubreSedeDe, sedeDe, tieneSedes } from "@/lib/sede";
 import { claveOtro, esPregunta, type Respuestas } from "./formulario/esquema";
 import { camino, siguienteSeccion, validarRespuestas } from "./formulario/motor";
 import type { SesionClausura } from "./sesion";
 
-const PROYECCION = { documento: 1, ciudad: 1, grupo: 1, nombre: 1, nombrePropuesto: 1, correo: 1, correoPropuesto: 1, estado: 1, activo: 1 } as const;
-export type EstudianteLeido = Pick<Student, "_id" | "documento" | "ciudad" | "grupo" | "nombre" | "nombrePropuesto" | "correo" | "correoPropuesto" | "estado" | "activo">;
+const PROYECCION = { documento: 1, ciudad: 1, sede: 1, grupo: 1, nombre: 1, nombrePropuesto: 1, correo: 1, correoPropuesto: 1, estado: 1, activo: 1 } as const;
+export type EstudianteLeido = Pick<Student, "_id" | "documento" | "ciudad" | "sede" | "grupo" | "nombre" | "nombrePropuesto" | "correo" | "correoPropuesto" | "estado" | "activo">;
 
 export type Contexto = { student: EstudianteLeido; evento: Evento; respuesta: RespuestaClausura | null; celularMostrado: string | null };
 
@@ -33,7 +34,21 @@ export type ResultadoIngreso =
   | { tipo: "no_encontrado" }
   | { tipo: "pronto" }
   | { tipo: "inactivo" }
+  /** Su ciudad tiene sedes, no tiene sede asignada y hay un evento por sede: ve "Escríbele a tu monitor" (como un inactivo). */
+  | { tipo: "sin_sede" }
   | { tipo: "ok"; ctx: Contexto };
+
+/**
+ * Evento que le corresponde (por ciudad y sede). Si su ciudad tiene sedes y no tiene sede asignada, solo entra a un evento de la
+ * ciudad completa ("Uruguay") que esté abierto; si en cambio hay eventos por sede, queda "sin_sede".
+ */
+function eventoDelEstudiante(todos: Evento[], s: EstudianteLeido): { evento: Evento | null; sinSede: boolean } {
+  const sede = sedeDe(s);
+  const evento = eventoParaCiudad(todos, s.ciudad, sede);
+  if (sede || !tieneSedes(s.ciudad) || evento?.estado === "abierto") return { evento, sinSede: false };
+  const hayPorSede = todos.some((e) => e.estado !== "borrador" && cubreSedeDe(e.ciudades, s.ciudad));
+  return hayPorSede ? { evento: null, sinSede: true } : { evento, sinSede: false };
+}
 
 /** Busca al estudiante por documento y el evento de SU ciudad (sin importar por cuál enlace entró). */
 export async function ingresar(documentoEscrito: string): Promise<ResultadoIngreso> {
@@ -44,7 +59,8 @@ export async function ingresar(documentoEscrito: string): Promise<ResultadoIngre
   if (!student) return { tipo: "no_encontrado" };
   // Inactivo: no entra al formulario; ve "Escríbele a tu monitor".
   if (esInactivo(student)) return { tipo: "inactivo" };
-  const evento = eventoParaCiudad(await eventos.find({ estado: { $in: ["abierto", "cerrado"] } }).toArray(), student.ciudad);
+  const { evento, sinSede } = eventoDelEstudiante(await eventos.find({ estado: { $in: ["abierto", "cerrado"] } }).toArray(), student);
+  if (sinSede) return { tipo: "sin_sede" };
   if (!evento) return { tipo: "pronto" };
   const [respuesta, celularMostrado] = await Promise.all([
     respuestas.findOne({ eventoId: evento._id, studentId: student._id }),
@@ -58,7 +74,7 @@ export async function cargar(s: SesionClausura): Promise<Contexto | null> {
   const { estudiantes, eventos, respuestas } = await clausura();
   const student = (await estudiantes.findOne({ _id: new ObjectId(s.studentId) }, { projection: PROYECCION })) as EstudianteLeido | null;
   if (!student || esInactivo(student)) return null;
-  const evento = eventoParaCiudad(await eventos.find({ estado: { $in: ["abierto", "cerrado"] } }).toArray(), student.ciudad);
+  const { evento } = eventoDelEstudiante(await eventos.find({ estado: { $in: ["abierto", "cerrado"] } }).toArray(), student);
   if (!evento || evento._id.toHexString() !== s.eventoId) return null;
   const [respuesta, celularMostrado] = await Promise.all([
     respuestas.findOne({ eventoId: evento._id, studentId: student._id }),

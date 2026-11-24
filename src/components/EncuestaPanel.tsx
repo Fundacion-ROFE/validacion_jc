@@ -10,6 +10,7 @@ import { ultimaActividad } from "@/lib/testimonios/estado";
 import { soloActivos, visiblesSegunFiltro } from "@/lib/activo";
 import AppShell from "./AppShell";
 import { EtiquetaInactivo, FiltroInactivos, estilosInactivos as si } from "./Inactivos";
+import { tieneSedes, ubicacion } from "@/lib/sede";
 import m from "./MonitorPanel.module.css";
 import t from "./TestimoniosPanel.module.css";
 
@@ -246,7 +247,7 @@ export default function EncuestaPanel({ user, inicial }: { user: SessionUser; in
                   <i className={`${t.dot} ${t.mobileDot}`} style={{ background: st.dot }} />
                   <div className={t.whoText}>
                     <div className={t.name}>{f.nombre} <EtiquetaInactivo info={f.inactivo} /></div>
-                    <div className={t.doc}>{f.documento} · {f.ciudad}{f.ciudadOriginal ? <span className={t.alias}> ({f.ciudadOriginal})</span> : null}</div>
+                    <div className={t.doc}>{f.documento} · {ubicacion(f.ciudad, f.sede)}{!f.sede && tieneSedes(f.ciudad) ? " · Sin sede" : ""}{f.ciudadOriginal ? <span className={t.alias}> ({f.ciudadOriginal})</span> : null}</div>
                   </div>
                 </div>
                 <div className={t.contact}>
@@ -291,6 +292,7 @@ export default function EncuestaPanel({ user, inicial }: { user: SessionUser; in
               {abierta.respuesta && <><dt>Respondió</dt><dd>{fecha(abierta.respuesta.fecha)} · {POR[abierta.respuesta.por]}{abierta.respuesta.total > 1 ? ` · ${abierta.respuesta.total} respuestas (cuenta la más reciente)` : ""}</dd></>}
               <dt>Documento</dt><dd>{abierta.documento}</dd>
               <dt>Ciudad</dt><dd>{abierta.ciudad}{abierta.ciudadOriginal ? ` (escrita como "${abierta.ciudadOriginal}")` : ""}</dd>
+              {tieneSedes(abierta.ciudad) && <><dt>Sede</dt><dd>{abierta.sede ?? "Sin sede"}</dd></>}
               <dt>Celular</dt><dd>{abierta.celular ? celularConIndicativo(abierta.celular, abierta.ciudad) : "—"}</dd>
               <dt>Correo</dt><dd>{abierta.correo || "—"}</dd>
             </dl>

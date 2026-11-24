@@ -1,5 +1,7 @@
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import { collections } from "./db";
+import { asignarSede, type Asignador } from "./estudiantes-sede";
+import { sedeDe, sedeValida, tieneSedes } from "./sede";
 import type { Actor, ChangeLog, Estado, Student } from "./types";
 import { checkEmail } from "./validation/email";
 import { cleanSpaces, normalizeCity, normalizeDocumento, toProperName } from "./validation/name";
@@ -10,6 +12,8 @@ import { cleanSpaces, normalizeCity, normalizeDocumento, toProperName } from "./
 //  - Pendientes con datos distintos: se actualizan.
 //  - Validados o corregidos: NUNCA se tocan (se muestran como "protegidos" si el archivo trae otros datos).
 //  - Los que están en la base pero no en el archivo ("ausentes"): solo se eliminan si la persona los elige.
+//  - Columna "Sede" (opcional, p. ej. Uruguay → Colonia / Paysandú): si viene con un valor válido se asigna a TODOS
+//    (también a validados: la sede no es un dato de validación). Si no viene o la celda está vacía, no se toca la sede.
 
 // Nombres de columna aceptados (ya normalizados: minúsculas, sin tildes).
 const COLUMNAS = {
@@ -21,6 +25,7 @@ const COLUMNAS = {
   apellidos: ["apellidos"],
   correo: ["correo", "email", "e mail", "correo electronico", "correo personal"],
   monitor: ["monitor", "monitora", "docente", "tutor"],
+  sede: ["sede"],
 } as const;
 
 function pick(row: Record<string, string>, campo: keyof typeof COLUMNAS): string {
@@ -31,10 +36,14 @@ function pick(row: Record<string, string>, campo: keyof typeof COLUMNAS): string
 export type FilaImport = {
   fila: number; documento: string; nombreRaw: string; nombre: string; correoRaw: string; correo: string;
   ciudad: string; grupo: string; monitorRef: string;
+  /** Sede válida para su ciudad, o "" (columna ausente, vacía o con un valor que no es de esa ciudad). */
+  sede: string;
 };
 export type Problema = { fila: number; documento?: string; mensaje: string };
 export type Cambio = { campo: "nombre" | "correo" | "ciudad" | "grupo" | "monitorRef"; antes: string; despues: string };
 export type Existente = { id: string; documento: string; nombre: string; ciudad: string; estado: Estado };
+/** Sede que se asignará (antes "" = sin sede). */
+export type CambioSede = { documento: string; nombre: string; ciudad: string; antes: string; despues: string; nuevo: boolean };
 
 export type PlanImport = {
   columnas: string[];
@@ -47,6 +56,8 @@ export type PlanImport = {
   errores: Problema[];
   avisos: Problema[];
   ciudades: Record<string, number>;
+  /** Sedes que se asignan desde la columna "Sede" (vacío si el archivo no la trae). */
+  sedes: CambioSede[];
 };
 
 /** Valida y normaliza las filas del archivo. */
@@ -75,9 +86,15 @@ export function leerFilas(rows: Record<string, string>[]) {
     else if (check.educational) avisos.push({ fila, documento, mensaje: `Correo educativo: ${check.email}` });
     else if (check.suggestion) avisos.push({ fila, documento, mensaje: `¿Dominio mal escrito? ${check.email} → ${check.suggestion}` });
 
+    const sedeRaw = cleanSpaces(pick(row, "sede"));
+    const sede = sedeRaw ? sedeValida(ciudad, sedeRaw) ?? "" : "";
+    if (sedeRaw && !sede) {
+      avisos.push({ fila, documento, mensaje: tieneSedes(ciudad) ? `Sede "${sedeRaw}" no es de ${ciudad}: no se asigna` : `${ciudad} no tiene sedes: se ignora "${sedeRaw}"` });
+    }
+
     filas.push({
       fila, documento, nombreRaw, nombre: toProperName(nombreRaw), correoRaw, correo: check.email, ciudad,
-      grupo: cleanSpaces(pick(row, "grupo")), monitorRef: cleanSpaces(pick(row, "monitor")),
+      grupo: cleanSpaces(pick(row, "grupo")), monitorRef: cleanSpaces(pick(row, "monitor")), sede,
     });
   });
   return { filas, errores, avisos };
@@ -103,11 +120,15 @@ export async function planificar(rows: Record<string, string>[]): Promise<PlanIm
 
   const plan: PlanImport = {
     columnas: Object.keys(rows[0] ?? {}), filasLeidas: rows.length,
-    nuevos: [], cambiados: [], protegidos: [], ausentes: [], sinCambios: 0, errores, avisos, ciudades: {},
+    nuevos: [], cambiados: [], protegidos: [], ausentes: [], sinCambios: 0, errores, avisos, ciudades: {}, sedes: [],
   };
   for (const f of filas) {
     plan.ciudades[f.ciudad] = (plan.ciudades[f.ciudad] ?? 0) + 1;
     const actual = porDoc.get(f.documento);
+    // La sede va aparte de la protección: también se asigna a validados y corregidos.
+    if (f.sede && (actual ? sedeDe(actual) ?? "" : "") !== f.sede && (!actual || sedeValida(actual.ciudad, f.sede))) {
+      plan.sedes.push({ documento: f.documento, nombre: actual ? actual.nombrePropuesto ?? actual.nombre : f.nombre, ciudad: actual?.ciudad ?? f.ciudad, antes: actual ? sedeDe(actual) ?? "" : "", despues: f.sede, nuevo: !actual });
+    }
     if (!actual) { plan.nuevos.push({ ...f, avisos: avisosPorFila.get(f.fila) ?? [] }); continue; }
     const cambios = diferencias(actual, f);
     if (cambios.length === 0) { plan.sinCambios++; continue; }
@@ -117,13 +138,14 @@ export async function planificar(rows: Record<string, string>[]): Promise<PlanIm
   return plan;
 }
 
-export type ResultadoImport = { insertados: number; actualizados: number; eliminados: number; protegidos: number };
+export type ResultadoImport = { insertados: number; actualizados: number; eliminados: number; protegidos: number; sedes: number };
 
 /**
  * Aplica el archivo. Vuelve a calcular el plan en este momento (por si alguien validó mientras se revisaba la vista previa)
  * y solo elimina ausentes que sigan ausentes y que estén en `eliminarIds`.
  */
-export async function aplicar(rows: Record<string, string>[], eliminarIds: string[], actor: Actor): Promise<ResultadoImport & { plan: PlanImport }> {
+/** asignador: quién queda en el historial de las sedes (por defecto, el mismo actor). */
+export async function aplicar(rows: Record<string, string>[], eliminarIds: string[], actor: Actor, asignador?: Asignador): Promise<ResultadoImport & { plan: PlanImport }> {
   const plan = await planificar(rows);
   const { students, changeLog } = await collections();
   const now = new Date();
@@ -166,5 +188,12 @@ export async function aplicar(rows: Record<string, string>[], eliminarIds: strin
   }
   if (logs.length) await changeLog.insertMany(logs);
 
-  return { plan, insertados: plan.nuevos.length, actualizados, eliminados, protegidos: plan.protegidos.length };
+  // Sedes de la columna "Sede": una asignación por sede (queda en el historial como "Actualizado desde la lista").
+  const quien: Asignador = asignador ?? { usuario: actor.usuario ?? "script", nombre: actor.usuario ?? "script", rol: "admin", ciudades: [] };
+  let sedes = 0;
+  for (const sede of new Set(plan.sedes.map((x) => x.despues))) {
+    sedes += (await asignarSede(plan.sedes.filter((x) => x.despues === sede).map((x) => x.documento), sede, quien, "importar")).cambiadas;
+  }
+
+  return { plan, insertados: plan.nuevos.length, actualizados, eliminados, protegidos: plan.protegidos.length, sedes };
 }

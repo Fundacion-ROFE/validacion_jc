@@ -13,6 +13,7 @@ import m from "./MonitorPanel.module.css";
 import t from "./TestimoniosPanel.module.css";
 import c from "./ClausuraPanel.module.css";
 import { descargarExcel } from "./ClausuraResumen";
+import { enlaceWhatsApp, ORIGEN_TXT, pendientes, textoPendientesExcel, textoPendientesLista, textoRecordatorio } from "@/lib/clausura/recordatorio";
 
 // Seguimiento de la clausura: quién respondió, si asistirá y comentarios de los monitores.
 
@@ -110,6 +111,23 @@ export default function ClausuraPanel({ user, inicial }: { user: SessionUser; in
   useEffect(() => { cargar(); }, [evento]);
   useEffect(() => { aUrl({ evento, estado: filtro, asistencia: asis, ciudad, q }); }, [evento, filtro, asis, ciudad, q]);
 
+  /** Enlace público del formulario (si el servidor no tiene CLAUSURA_HOST ni APP_URL, el dominio de este panel). */
+  const enlaceEvento = (e: { enlace: string }) => (e.enlace.startsWith("/") ? `${window.location.origin}${e.enlace}` : e.enlace);
+
+  /** "Copiar pendientes": En progreso + Sin responder del evento (y de la ciudad/sede elegida), sin inactivos. Solo lectura. */
+  async function copiarPendientes(modo: "excel" | "lista") {
+    if (!ev) return;
+    const n = pendientes(enCiudad).length;
+    if (!n) return aviso("No hay pendientes en este evento.");
+    const txt = modo === "excel" ? textoPendientesExcel(enCiudad) : textoPendientesLista(enCiudad, `${ev.nombreVisible} · ${ev.titulo}`);
+    try {
+      await navigator.clipboard.writeText(txt);
+      aviso(`${n} ${n === 1 ? "pendiente copiado" : "pendientes copiados"} ✓${modo === "excel" ? " Pégalos en Excel." : ""}`, true);
+    } catch {
+      aviso("No se pudo copiar. Intenta desde otro navegador.");
+    }
+  }
+
   function aviso(text: string, ok = false) {
     clearTimeout(toastTimer.current);
     setToast({ text, ok });
@@ -117,8 +135,9 @@ export default function ClausuraPanel({ user, inicial }: { user: SessionUser; in
   }
 
   const filas = datos?.filas ?? null;
-  const ciudades = useMemo(() => [...new Set((filas ?? []).map((f) => f.ciudad))].sort((a, b) => a.localeCompare(b, "es")), [filas]);
-  const enCiudad = useMemo(() => (filas ?? []).filter((f) => !ciudad || f.ciudad === ciudad), [filas, ciudad]);
+  // "Uruguay · Colonia" y "Uruguay · Paysandú" se filtran por separado.
+  const ciudades = useMemo(() => [...new Set((filas ?? []).map((f) => f.ubicacion))].sort((a, b) => a.localeCompare(b, "es")), [filas]);
+  const enCiudad = useMemo(() => (filas ?? []).filter((f) => !ciudad || f.ubicacion === ciudad), [filas, ciudad]);
   // Los inactivos no cuentan en totales ni porcentajes; solo se ven con "Mostrar inactivos".
   const activosCiudad = useMemo(() => soloActivos(enCiudad), [enCiudad]);
   const nInactivos = enCiudad.length - activosCiudad.length;
@@ -216,12 +235,12 @@ export default function ClausuraPanel({ user, inicial }: { user: SessionUser; in
             <i className={`${t.dot} ${t.mobileDot}`} style={{ background: st.dot }} />
             <div className={t.whoText}>
               <div className={t.name}>{f.nombre} <EtiquetaInactivo info={f.inactivo} /></div>
-              <div className={t.doc}>{f.documento} · {f.ciudad}{f.grupo ? ` · ${f.grupo}` : ""}</div>
+              <div className={t.doc}>{f.documento} · {f.ubicacion}{f.grupo ? ` · ${f.grupo}` : ""}</div>
             </div>
           </div>
           <div className={t.contact}>
-            <span>{f.celular || "(sin celular)"}</span>
-            <span>{f.whatsapp ? `WhatsApp: ${f.whatsapp}` : ""}</span>
+            <span>{f.contactoWhatsApp?.numero || "Sin celular"}</span>
+            <span className={c.origen}>{f.contactoWhatsApp ? `de ${ORIGEN_TXT[f.contactoWhatsApp.origen]}` : ""}{f.whatsapp === "No tiene" ? " · dijo que no tiene WhatsApp" : ""}</span>
           </div>
           <div className={t.state}>
             <span className={t.badge} style={{ background: st.bg, color: st.fg }}><i className={t.dot} style={{ background: st.dot, width: 8, height: 8 }} />{st.label}</span>
@@ -232,6 +251,12 @@ export default function ClausuraPanel({ user, inicial }: { user: SessionUser; in
             <span className={t.por}>{f.actualizada ? `Actualizado ${fecha(f.actualizada)}` : ""}</span>
           </div>
           <div className={t.acts}>
+            {f.contactoWhatsApp && ev ? (
+              <a className={`${t.act} ${c.whatsapp}`} href={enlaceWhatsApp(f.contactoWhatsApp.digitos, textoRecordatorio(f.estado, f.nombre, ev.nombreMensaje, enlaceEvento(ev)))}
+                target="_blank" rel="noreferrer" title={`Escribir a ${f.contactoWhatsApp.numero} (${ORIGEN_TXT[f.contactoWhatsApp.origen]})`} aria-label={`WhatsApp a ${f.nombre}`}>WhatsApp</a>
+            ) : (
+              <button type="button" className={`${t.act} ${c.whatsapp}`} disabled title="Sin celular" aria-label={`WhatsApp a ${f.nombre}: sin celular`}>WhatsApp</button>
+            )}
             <button type="button" className={`${t.act} ${f.comentarios.length ? t.actComentarios : t.actGhost}`} onClick={() => { setDetalle(f.id); setTexto(""); setErrorNota(""); setEdicion(null); setErrorEdicion(""); }}>
               Ver{f.comentarios.length ? ` · ${f.comentarios.length} coment.` : ""}
             </button>
@@ -266,6 +291,12 @@ export default function ClausuraPanel({ user, inicial }: { user: SessionUser; in
             <span className={c.estadoEvento} data-estado={ev.estado}>{ev.estado === "abierto" ? "Abierto" : ev.estado === "cerrado" ? "Cerrado" : "Borrador"}</span>
             <a href={`/clausura/${ev.slug}`} target="_blank" rel="noreferrer">/clausura/{ev.slug}</a>
             {puedeExportar && <button type="button" className={m.copyBtn} disabled={exportando} onClick={exportar}>{exportando ? "Generando…" : "Descargar Excel"}</button>}
+            <span className={c.copiar}>
+              <button type="button" className={m.copyBtn} disabled={!filas} onClick={() => copiarPendientes("excel")} title="En progreso y Sin responder, para pegar en Excel (separado por tabulador)">
+                Copiar pendientes ({pendientes(enCiudad).length})
+              </button>
+              <button type="button" className={`${t.act} ${t.actGhost}`} disabled={!filas} onClick={() => copiarPendientes("lista")} title="Lista simple para pegar en WhatsApp">Copiar como lista</button>
+            </span>
           </div>
         )}
       </div>
@@ -348,10 +379,11 @@ export default function ClausuraPanel({ user, inicial }: { user: SessionUser; in
               {abierta.enviadaEn && <><dt>Envió</dt><dd>{fecha(abierta.enviadaEn)}</dd></>}
               {abierta.actualizada && <><dt>Última actualización</dt><dd>{fecha(abierta.actualizada)}</dd></>}
               <dt>Documento</dt><dd>{abierta.documento}</dd>
-              <dt>Ciudad · grupo</dt><dd>{abierta.ciudad}{abierta.grupo ? ` · ${abierta.grupo}` : ""}</dd>
+              <dt>Ciudad · grupo</dt><dd>{abierta.ubicacion}{abierta.grupo ? ` · ${abierta.grupo}` : ""}</dd>
               <dt>Correo</dt><dd>{abierta.correo || "—"}{abierta.correoCambio ? " (nuevo, lo cambió en la clausura)" : ""}</dd>
               <dt>Celular</dt><dd>{abierta.celular || "—"}</dd>
               <dt>WhatsApp</dt><dd>{abierta.whatsapp || "—"}</dd>
+              <dt>Número para escribirle</dt><dd>{abierta.contactoWhatsApp ? `${abierta.contactoWhatsApp.numero} (de ${ORIGEN_TXT[abierta.contactoWhatsApp.origen]})` : "Sin celular"}</dd>
               <dt>Género</dt><dd>{abierta.genero || "—"}</dd>
               {abierta.proyecto && <><dt>Proyecto</dt><dd>{abierta.proyecto.presenta ? `Presenta${abierta.proyecto.nombre ? `: ${abierta.proyecto.nombre}` : ""}` : "No presenta"}</dd></>}
             </dl>

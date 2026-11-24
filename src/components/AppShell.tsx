@@ -2,15 +2,18 @@
 
 import type { SessionUser } from "@/lib/auth";
 import { puede, ROL_TXT, type Permiso } from "@/lib/permisos";
+import { tieneSedes } from "@/lib/sede";
 import s from "./AppShell.module.css";
 
 export type Seccion = "resumen" | "estudiantes" | "importar" | "usuarios" | "testimonios" | "testimonios_resumen" | "testimonios_lista" | "testimonios_sin_duenio"
-  | "encuesta" | "encuesta_resumen" | "encuesta_sin_coincidencia" | "clausura" | "clausura_resumen" | "clausura_eventos";
+  | "encuesta" | "encuesta_resumen" | "encuesta_sin_coincidencia" | "clausura" | "clausura_resumen" | "clausura_eventos" | "sedes";
 
 // Cada sección aparece solo si el rol tiene el permiso (el servidor lo vuelve a validar).
 const NAV: { key: Seccion; label: string; href: string; permiso?: Permiso }[] = [
   { key: "resumen", label: "Resumen", href: "/admin", permiso: "ver_resumen" },
   { key: "estudiantes", label: "Estudiantes", href: "/monitor" },
+  // Sede dentro de la ciudad (Uruguay → Colonia / Paysandú): asignar y ver cuántas faltan.
+  { key: "sedes", label: "Sedes Uruguay", href: "/sedes", permiso: "estudiantes_sede" },
   { key: "testimonios", label: "Testimonios", href: "/testimonios", permiso: "testimonios_ver" },
   { key: "testimonios_resumen", label: "Avance testimonios", href: "/testimonios/resumen", permiso: "testimonios_resumen" },
   { key: "importar", label: "Subir lista", href: "/admin/importar", permiso: "subir_lista" },
@@ -34,7 +37,9 @@ export function iniciales(nombre: string): string {
 
 export default function AppShell({ user, active, children }: { user: SessionUser; active: Seccion; children: React.ReactNode }) {
   const nav = user.rol === "monitor"
-    ? [{ key: "estudiantes" as Seccion, label: "Mi grupo", href: "/monitor" }, { key: "testimonios" as Seccion, label: "Testimonios", href: "/testimonios" }, { key: "encuesta" as Seccion, label: "Encuesta final", href: "/encuesta" }, { key: "clausura" as Seccion, label: "Clausura", href: "/clausura/panel" }, { key: "clausura_resumen" as Seccion, label: "Avance clausura", href: "/clausura/resumen" }]
+    ? [{ key: "estudiantes" as Seccion, label: "Mi grupo", href: "/monitor" },
+      // Solo si alguna de sus ciudades tiene sedes (Uruguay).
+      ...(user.ciudades.some(tieneSedes) ? [{ key: "sedes" as Seccion, label: "Sedes", href: "/sedes" }] : []), { key: "testimonios" as Seccion, label: "Testimonios", href: "/testimonios" }, { key: "encuesta" as Seccion, label: "Encuesta final", href: "/encuesta" }, { key: "clausura" as Seccion, label: "Clausura", href: "/clausura/panel" }, { key: "clausura_resumen" as Seccion, label: "Avance clausura", href: "/clausura/resumen" }]
     : NAV.filter((n) => !n.permiso || puede(user.rol, n.permiso));
 
   async function salir() {

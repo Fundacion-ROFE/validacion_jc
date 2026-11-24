@@ -2,13 +2,15 @@
 import { soloActivos } from "@/lib/activo";
 import type { SessionUser } from "@/lib/auth";
 import { puede } from "@/lib/permisos";
+import { desglosarSedes, type DesgloseSede } from "@/lib/sede";
 import { testimonios } from "./db";
 import { monitoresPorCiudad } from "./usuarios-lectura";
 import { filasTestimonios, type FilaTestimonio } from "./vista";
 
 /** total = realizado + pendiente. conComentarios es informativo: pendientes que ya tienen comentarios (≤ pendiente). */
 export type Conteo = { total: number; realizado: number; pendiente: number; conComentarios: number };
-export type CiudadTestimonios = Conteo & { ciudad: string; monitores: string[] };
+/** sedes: solo en ciudades con sedes (Uruguay): desglose informativo; los totales de la ciudad no cambian. */
+export type CiudadTestimonios = Conteo & { ciudad: string; monitores: string[]; sedes?: DesgloseSede[] };
 export type ResumenTestimonios = { total: Conteo; ciudades: CiudadTestimonios[]; porResolver: { sinDuenio: number; conflicto: number } | null; actualizado: string };
 
 const vacio = (): Conteo => ({ total: 0, realizado: 0, pendiente: 0, conComentarios: 0 });
@@ -21,7 +23,7 @@ function sumar(c: Conteo, f: Pick<FilaTestimonio, "estado" | "conComentarios">) 
 }
 
 /** Conteos por ciudad, ordenados de menor a mayor avance (a igual avance, alfabético). Los inactivos no cuentan. Función pura. */
-export function contarPorCiudad(filas: (Pick<FilaTestimonio, "ciudad" | "estado" | "conComentarios"> & Partial<Pick<FilaTestimonio, "inactivo">>)[], monitores = new Map<string, string[]>()): { total: Conteo; ciudades: CiudadTestimonios[] } {
+export function contarPorCiudad(filas: (Pick<FilaTestimonio, "ciudad" | "estado" | "conComentarios"> & Partial<Pick<FilaTestimonio, "inactivo" | "sede">>)[], monitores = new Map<string, string[]>()): { total: Conteo; ciudades: CiudadTestimonios[] } {
   const total = vacio();
   const por = new Map<string, CiudadTestimonios>();
   for (const f of soloActivos(filas)) {
@@ -29,6 +31,11 @@ export function contarPorCiudad(filas: (Pick<FilaTestimonio, "ciudad" | "estado"
     sumar(c, f);
     sumar(total, f);
     por.set(f.ciudad, c);
+  }
+  const activas = soloActivos(filas);
+  for (const c of por.values()) {
+    const d = desglosarSedes(c.ciudad, activas.filter((f) => f.ciudad === c.ciudad), (f) => f.estado === "realizado");
+    if (d) c.sedes = d;
   }
   const ciudades = [...por.values()].sort((a, b) => avance(a) - avance(b) || a.ciudad.localeCompare(b.ciudad, "es"));
   return { total, ciudades };

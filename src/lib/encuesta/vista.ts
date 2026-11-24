@@ -2,6 +2,7 @@
 // El alcance por ciudad es el mismo de testimonios: un monitor solo ve participantes de sus ciudades.
 import { infoInactivo, type InfoInactivo } from "@/lib/activo";
 import type { SessionUser } from "@/lib/auth";
+import { sedeDe } from "@/lib/sede";
 import { alcanceTestimonios } from "@/lib/testimonios/vista";
 import { ultimaActividad } from "@/lib/testimonios/estado";
 import { asignarRespuestas, indiceEncuesta, msRespuesta, type NoAsignada } from "./cruce";
@@ -15,6 +16,8 @@ export type FilaEncuesta = {
   documento: string;
   ciudad: string;
   ciudadOriginal: string | null;
+  /** Sede (Uruguay → Colonia / Paysandú) o null; se lee de la lista de testimonios. */
+  sede: string | null;
   celular: string;
   correo: string;
   estado: EstadoEncuesta;
@@ -46,7 +49,7 @@ async function cruceCompleto() {
 export async function filasEncuesta(user: Pick<SessionUser, "rol" | "ciudades">): Promise<FilaEncuesta[]> {
   const { participantes, comentarios } = await encuesta();
   const lista = (await participantes.find(alcanceTestimonios(user), {
-    projection: { documento: 1, nombre: 1, correo: 1, celular: 1, ciudad: 1, ciudadOriginal: 1, activo: 1, inactivoMotivo: 1, inactivoEn: 1, inactivoPor: 1 },
+    projection: { documento: 1, nombre: 1, correo: 1, celular: 1, ciudad: 1, ciudadOriginal: 1, sede: 1, activo: 1, inactivoMotivo: 1, inactivoEn: 1, inactivoPor: 1 },
   }).toArray()) as ParticipanteLectura[];
   const ids = lista.map((p) => p._id);
   const [{ porParticipante }, notas] = await Promise.all([
@@ -67,7 +70,7 @@ export async function filasEncuesta(user: Pick<SessionUser, "rol" | "ciudades">)
     const cm = notasDe.get(k) ?? [];
     const ua = ultimaActividad(cm);
     return {
-      id: k, nombre: p.nombre, documento: p.documento, ciudad: p.ciudad, ciudadOriginal: p.ciudadOriginal ?? null,
+      id: k, nombre: p.nombre, documento: p.documento, ciudad: p.ciudad, ciudadOriginal: p.ciudadOriginal ?? null, sede: sedeDe(p),
       celular: p.celular ?? "", correo: p.correo ?? "",
       estado: a ? "respondio" : "pendiente",
       respuesta: a && ms !== null ? { fecha: new Date(ms).toISOString(), por: a.por, total: a.total } : null,

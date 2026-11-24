@@ -27,3 +27,10 @@
 .proyecto { display: block; margin-top: 4px; font: 600 12.5px var(--font); color: var(--muted); }
 .proyecto[data-presenta="true"] { color: var(--green-dark); }
 .evento button { margin-top: 2px; }
+
+/* Recordatorios: botón de WhatsApp por fila, origen del número y "Copiar pendientes" */
+.whatsapp { background: #e7f8ee; color: #136c3d; border: 1.5px solid #bfe9cf; }
+.whatsapp:hover { background: #d6f3e2; }
+.whatsapp:disabled { background: #fff; color: var(--muted-2); border-color: var(--line); cursor: not-allowed; }
+.origen { font-size: 12px; color: var(--muted); }
+.copiar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }

@@ -21,6 +21,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "no_encontrado" }, { status: 404 });
   }
   if (r.tipo === "pronto") return NextResponse.json({ resultado: "pronto" });
-  if (r.tipo === "inactivo") return NextResponse.json({ resultado: "inactivo" });
+  // Inactivo, o de Uruguay sin sede ante un evento por sede: "Escríbele a tu monitor".
+  if (r.tipo === "inactivo" || r.tipo === "sin_sede") return NextResponse.json({ resultado: "inactivo" });
   return responderVista(r.ctx);
 }

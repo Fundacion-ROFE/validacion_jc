@@ -5,6 +5,7 @@ import type { CiudadResumen } from "@/app/api/admin/resumen/route";
 import type { SessionUser } from "@/lib/auth";
 import AppShell from "./AppShell";
 import { IncluirInactivos, paramInactivos } from "./Inactivos";
+import { DesgloseSedes } from "./Sede";
 import s from "./AdminOverview.module.css";
 
 type Resumen = { total: { total: number; validado: number; corregido: number; pendiente: number; inactivos: number }; ciudades: CiudadResumen[]; actualizado: string };
@@ -134,7 +135,7 @@ export default function AdminOverview({ user }: { user: SessionUser }) {
         const p = pct(c.validado, c.total);
         return (
           <a key={c.ciudad} className={s.city} href={`/monitor?ciudad=${encodeURIComponent(c.ciudad)}`} title={`Ver estudiantes de ${c.ciudad}`}>
-            <div className={s.cName}>{c.ciudad}</div>
+            <div className={s.cName}>{c.ciudad}<DesgloseSedes sedes={c.sedes} detalle={(x) => `(${x.total ? Math.round((x.completados / x.total) * 100) : 0}%)`} /></div>
             <div className={s.cBar} aria-hidden>
               <i style={{ width: `${p}%`, background: colorAvance(p) }} />
               <i style={{ width: `${pct(c.corregido, c.total)}%`, background: "var(--yellow-soft)" }} />

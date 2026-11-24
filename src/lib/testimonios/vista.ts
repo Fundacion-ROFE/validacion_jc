@@ -4,6 +4,7 @@ import type { Filter } from "mongodb";
 import { infoInactivo, type InfoInactivo } from "@/lib/activo";
 import type { SessionUser } from "@/lib/auth";
 import { puede } from "@/lib/permisos";
+import { sedeDe } from "@/lib/sede";
 import { testimonios, type Participante } from "./db";
 import { estadoDe, parseMarcaTemporal, ultimaActividad, type EstadoTestimonio } from "./estado";
 
@@ -20,6 +21,8 @@ export type FilaTestimonio = {
   documento: string;
   ciudad: string;
   ciudadOriginal: string | null;
+  /** Sede (Uruguay → Colonia / Paysandú) o null. Mismo dato que students.sede. */
+  sede: string | null;
   celular: string;
   correo: string;
   estado: EstadoTestimonio;
@@ -63,7 +66,7 @@ export async function filasTestimonios(user: Pick<SessionUser, "rol" | "ciudades
     const cm = notasDe.get(k) ?? [];
     const ua = ultimaActividad(cm);
     return {
-      id: k, nombre: p.nombre, documento: p.documento, ciudad: p.ciudad, ciudadOriginal: p.ciudadOriginal ?? null,
+      id: k, nombre: p.nombre, documento: p.documento, ciudad: p.ciudad, ciudadOriginal: p.ciudadOriginal ?? null, sede: sedeDe(p),
       celular: p.celular, correo: p.correo, estado: estadoDe(ev.length), conComentarios: cm.length > 0, envios: ev, comentarios: cm,
       ultimoEnvio: ev[0] ? Date.parse(ev[0].fecha ?? ev[0].recibidaEn) : null,
       ultimoComentario: ua?.ms ?? null,

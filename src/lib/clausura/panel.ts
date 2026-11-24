@@ -6,9 +6,11 @@ import { scopeFilter, type SessionUser } from "@/lib/auth";
 import { puede } from "@/lib/permisos";
 import { celularConIndicativo } from "@/lib/testimonios/celular";
 import type { Student } from "@/lib/types";
+import { ciudadesBase, filtroCobertura, sedeDe, ubicacion } from "@/lib/sede";
 import { clausura, type Evento, type RespuestaClausura } from "./db";
 import { GENEROS } from "./contacto";
-import { formularioActivo, formularioDe, modoProyecto } from "./evento";
+import { formularioActivo, formularioDe, modoProyecto, presentacionDe, TIPOS_EVENTO, tipoDe } from "./evento";
+import { baseEnlace, numeroWhatsApp, type NumeroWhatsApp } from "./recordatorio";
 import { claveOtro, esPregunta, type Formulario } from "./formulario/esquema";
 import { camino, preguntasDe } from "./formulario/motor";
 import { ID_PRESENTA_PROYECTO } from "./formulario/proyecto";
@@ -22,6 +24,10 @@ export type FilaClausura = {
   nombre: string;
   documento: string;
   ciudad: string;
+  /** Sede (Uruguay → Colonia / Paysandú) o null. */
+  sede: string | null;
+  /** "Uruguay · Colonia" o solo la ciudad: es lo que se muestra. */
+  ubicacion: string;
   grupo: string;
   estado: EstadoClausura;
   /** Opción elegida en la pregunta de asistencia (id y texto), o null. */
@@ -30,6 +36,8 @@ export type FilaClausura = {
   correoCambio: boolean;
   celular: string;
   whatsapp: string;
+  /** Número para el botón de WhatsApp (clausura: WhatsApp → celular; si no, lista de testimonios) o null = "Sin celular". */
+  contactoWhatsApp: NumeroWhatsApp | null;
   actualizada: string | null;
   enviadaEn: string | null;
   editando: boolean;
@@ -45,17 +53,31 @@ export type FilaClausura = {
   inactivo: InfoInactivo;
 };
 
-export type EventoPanel = { id: string; slug: string; titulo: string; nombreVisible: string; estado: Evento["estado"]; ciudades: string[]; proyecto: "obligatorio" | "opcional" | "no" };
+export type EventoPanel = {
+  id: string; slug: string; titulo: string; nombreVisible: string; estado: Evento["estado"]; ciudades: string[]; proyecto: "obligatorio" | "opcional" | "no";
+  /** Nombre para el mensaje de WhatsApp: "Clausura Jóvenes creaTIvos 2026 – Paysandú". */
+  nombreMensaje: string;
+  /** Enlace público del formulario (con CLAUSURA_HOST si está configurado; si no, relativo: el panel le pone su dominio). */
+  enlace: string;
+};
+
+/** "Clausura Jóvenes creaTIvos 2026 – Paysandú" (si algún dato sigue por definir: "Clausura 2026 – Paysandú"). */
+function nombreMensaje(e: Evento): string {
+  const p = presentacionDe(e);
+  return p.invitacion ?? `${TIPOS_EVENTO[tipoDe(e)].nombre} ${e.inicio.getUTCFullYear()} – ${e.nombreVisible}`;
+}
 
 /** Eventos que el usuario puede ver: los que cubren alguna de sus ciudades (coordinación y admin: todos). */
 export function eventosVisibles(eventos: Evento[], user: Pick<SessionUser, "rol" | "ciudades">): Evento[] {
   const todas = puede(user.rol, "ver_todas_las_ciudades");
-  return eventos.filter((e) => todas || (e.estado !== "borrador" && e.ciudades.some((c) => user.ciudades.includes(c))));
+  // "Uruguay · Colonia" cuenta como Uruguay: el monitor de Uruguay ve los eventos de las dos sedes.
+  return eventos.filter((e) => todas || (e.estado !== "borrador" && ciudadesBase(e.ciudades).some((c) => user.ciudades.includes(c))));
 }
 
 /** Alcance de estudiantes de un evento para este usuario (filtro en la consulta, nunca después). */
 export function alcanceEvento(evento: Pick<Evento, "ciudades">, user: Pick<SessionUser, "rol" | "ciudades">): Filter<Student> {
-  return { $and: [scopeFilter(user), { ciudad: { $in: evento.ciudades } }] };
+  // Ciudades completas + "Ciudad · Sede" (solo quienes tienen esa sede). Ver src/lib/sede.ts.
+  return { $and: [scopeFilter(user), filtroCobertura(evento.ciudades) as Filter<Student>] };
 }
 
 /** Formularios (ya con la regla del proyecto y los textos resueltos) de cada versión usada. */
@@ -97,20 +119,25 @@ export type DatosPanel = {
 };
 
 export async function datosPanel(user: Pick<SessionUser, "rol" | "ciudades">, eventoId?: string | null): Promise<DatosPanel> {
-  const { eventos, estudiantes, respuestas, comentarios } = await clausura();
+  const { eventos, estudiantes, respuestas, comentarios, participantes } = await clausura();
+  const base = baseEnlace(process.env.CLAUSURA_HOST, process.env.APP_URL);
   const visibles = eventosVisibles(await eventos.find({}).sort({ inicio: 1 }).toArray(), user);
-  const lista: EventoPanel[] = visibles.map((e) => ({ id: e._id.toHexString(), slug: e.slug, titulo: e.titulo, nombreVisible: e.nombreVisible, estado: e.estado, ciudades: e.ciudades, proyecto: modoProyecto(e) }));
+  const lista: EventoPanel[] = visibles.map((e) => ({ id: e._id.toHexString(), slug: e.slug, titulo: e.titulo, nombreVisible: e.nombreVisible, estado: e.estado, ciudades: e.ciudades, proyecto: modoProyecto(e),
+    nombreMensaje: nombreMensaje(e), enlace: `${base}/clausura/${e.slug}` }));
   const evento = visibles.find((e) => e._id.toHexString() === eventoId) ?? visibles.find((e) => e.estado === "abierto") ?? visibles[0] ?? null;
   if (!evento) return { eventos: lista, evento: null, asistencia: null, filas: [] };
 
   const alumnos = (await estudiantes.find(alcanceEvento(evento, user), {
-    projection: { documento: 1, nombre: 1, nombrePropuesto: 1, ciudad: 1, grupo: 1, correo: 1, correoPropuesto: 1, activo: 1, inactivoMotivo: 1, inactivoEn: 1, inactivoPor: 1 },
-  }).toArray()) as Pick<Student, "_id" | "documento" | "nombre" | "nombrePropuesto" | "ciudad" | "grupo" | "correo" | "correoPropuesto" | "activo" | "inactivoMotivo" | "inactivoEn" | "inactivoPor">[];
+    projection: { documento: 1, nombre: 1, nombrePropuesto: 1, ciudad: 1, sede: 1, grupo: 1, correo: 1, correoPropuesto: 1, activo: 1, inactivoMotivo: 1, inactivoEn: 1, inactivoPor: 1 },
+  }).toArray()) as Pick<Student, "_id" | "documento" | "nombre" | "nombrePropuesto" | "ciudad" | "sede" | "grupo" | "correo" | "correoPropuesto" | "activo" | "inactivoMotivo" | "inactivoEn" | "inactivoPor">[];
   const ids = alumnos.map((a) => a._id);
-  const [resp, notas] = await Promise.all([
+  const [resp, notas, enLista] = await Promise.all([
     respuestas.find({ eventoId: evento._id, studentId: { $in: ids } }).toArray(),
     comentarios.find({ eventoId: evento._id, studentId: { $in: ids } }).sort({ fecha: 1 }).toArray(),
+    // Celular de la lista de testimonios (solo lectura): respaldo del botón de WhatsApp.
+    participantes.find({ documento: { $in: alumnos.map((a) => a.documento) } }, { projection: { documento: 1, celular: 1 } }).toArray(),
   ]);
+  const celularLista = new Map(enLista.map((p) => [p.documento, p.celular ? String(p.celular) : ""]));
   const forms = await formulariosPorVersion(evento, resp.map((r) => r.formularioVersion));
   const porAlumno = new Map(resp.map((r) => [r.studentId.toHexString(), r]));
   const notasDe = new Map<string, ComentarioVista[]>();
@@ -131,13 +158,14 @@ export async function datosPanel(user: Pick<SessionUser, "rol" | "ciudades">, ev
     const v = pa && r ? r.respuestas[pa.id] : undefined;
     const c = r?.contacto;
     return {
-      id: k, nombre: a.nombrePropuesto ?? a.nombre, documento: a.documento, ciudad: a.ciudad, grupo: a.grupo ?? "",
+      id: k, nombre: a.nombrePropuesto ?? a.nombre, documento: a.documento, ciudad: a.ciudad, sede: sedeDe(a), ubicacion: ubicacion(a.ciudad, sedeDe(a)), grupo: a.grupo ?? "",
       estado: !r ? "sin_responder" : r.estado === "enviada" ? "respondio" : "en_progreso",
       asistencia: pa && v !== undefined ? { id: String(v), texto: textoRespuesta(pa, v, r?.respuestas[claveOtro(pa.id)]) } : null,
       correo: c ? (c.correoConfirmado ? c.correoMostrado : c.correoNuevo ?? "") : a.correoPropuesto ?? a.correo ?? "",
       correoCambio: !!c && !c.correoConfirmado,
       celular: c?.celular ? celularConIndicativo(c.celular, a.ciudad) : "",
       whatsapp: r ? whatsappTexto(r, a.ciudad) : "",
+      contactoWhatsApp: numeroWhatsApp(c, celularLista.get(a.documento), a.ciudad),
       actualizada: r?.actualizadaEn.toISOString() ?? null,
       enviadaEn: r?.enviadaEn?.toISOString() ?? null,
       editando: !!r?.borradorEdicion,

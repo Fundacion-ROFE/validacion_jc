@@ -151,8 +151,9 @@ describe("exportar pendientes (Excel)", () => {
     expect(r.status).toBe(200);
     expect(r.headers.get("X-Filas")).toBe("1");
     expect(await leerExcel(r)).toEqual([
-      ["Nombre completo", "Celular", "Correo", "Documento", "Ciudad", "Con comentarios", "Último comentario"],
-      ["Carla Cali", "+57 310 555 0033", "carla@gmail.com", "3", "Cali", "No", ""],
+      // "Sede" va al final (vacía si la persona no tiene sede): las columnas de antes no se corren.
+      ["Nombre completo", "Celular", "Correo", "Documento", "Ciudad", "Con comentarios", "Último comentario", "Sede"],
+      ["Carla Cali", "+57 310 555 0033", "carla@gmail.com", "3", "Cali", "No", "", ""],
     ]);
   });
   it("con ciudad filtrada exporta solo esa ciudad, con su nombre de archivo", async () => {

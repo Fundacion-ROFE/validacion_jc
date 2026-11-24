@@ -1,5 +1,6 @@
 import type { Collection } from "mongodb";
 import { infoInactivo } from "./activo";
+import { sedeDe, ubicacion } from "./sede";
 import type { Student } from "./types";
 import { checkEmail } from "./validation/email";
 import { nameWarnings } from "./validation/name";
@@ -12,6 +13,10 @@ export function monitorRow(s: Student, repetidos: Set<string>) {
     id: s._id.toHexString(),
     documento: s.documento,
     ciudad: s.ciudad,
+    /** Sede válida (Uruguay → Colonia / Paysandú) o null. */
+    sede: sedeDe(s),
+    /** "Uruguay · Colonia" o solo la ciudad. */
+    ubicacion: ubicacion(s.ciudad, sedeDe(s)),
     grupo: s.grupo,
     estado: s.estado,
     nombre: s.nombre,

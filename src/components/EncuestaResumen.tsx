@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { SessionUser } from "@/lib/auth";
 import type { ResumenEncuesta } from "@/lib/encuesta/resumen";
 import AppShell from "./AppShell";
+import { DesgloseSedes } from "./Sede";
 import s from "./AdminOverview.module.css";
 
 const REFRESCO_MS = 30_000;
@@ -93,7 +94,7 @@ export default function EncuestaResumen({ user }: { user: SessionUser }) {
         const p = pct(c.respondio, c.total);
         return (
           <a key={c.ciudad} className={s.city} href={`/encuesta?ciudad=${encodeURIComponent(c.ciudad)}`} title={`Ver encuesta de ${c.ciudad}`}>
-            <div className={s.cName}>{c.ciudad}</div>
+            <div className={s.cName}>{c.ciudad}<DesgloseSedes sedes={c.sedes} detalle={(x) => `(${x.total ? Math.round((x.completados / x.total) * 100) : 0}%)`} /></div>
             <div className={s.cBar} aria-hidden>
               <i style={{ width: `${p}%`, background: colorAvance(p) }} />
             </div>

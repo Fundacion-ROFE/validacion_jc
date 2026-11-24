@@ -98,7 +98,7 @@ export default function ImportPanel({ user }: { user: SessionUser }) {
     });
   }
 
-  const nada = plan && plan.nuevos.length + plan.cambiados.length + eliminar.size === 0;
+  const nada = plan && plan.nuevos.length + plan.cambiados.length + eliminar.size + (plan.sedes?.length ?? 0) === 0;
   const validadosAEliminar = plan ? plan.ausentes.filter((a) => eliminar.has(a.id) && a.estado !== "pendiente").length : 0;
 
   const stats: [string, string, number, string][] = plan ? [
@@ -126,6 +126,7 @@ export default function ImportPanel({ user }: { user: SessionUser }) {
             <li>{n(resultado.actualizados, "pendiente actualizado", "pendientes actualizados")}</li>
             <li>{n(resultado.eliminados, "eliminado", "eliminados")}</li>
             <li>{n(resultado.protegidos, "validado o corregido sin tocar", "validados o corregidos sin tocar")}</li>
+            {resultado.sedes > 0 && <li>{n(resultado.sedes, "sede asignada", "sedes asignadas")}</li>}
           </ul>
           <div className={s.resultActions}>
             <a className={s.primaryLink} href="/admin">Ver resumen</a>
@@ -233,6 +234,20 @@ export default function ImportPanel({ user }: { user: SessionUser }) {
             </details>
           )}
 
+          {plan.sedes?.length > 0 && (
+            <details id="sedes" className={s.section}>
+              <summary><span className={s.secTitle}><i className={s.dot} style={{ background: "var(--blue)" }} />Sedes ({plan.sedes.length})</span></summary>
+              <p className={s.secNote}>El archivo trae la columna <b>Sede</b>. Se asigna a todos estos, también a quienes ya validaron. Si una celda está vacía, la sede actual no se toca.</p>
+              {plan.sedes.map((x) => (
+                <div key={x.documento} className={s.item}>
+                  <div className={s.itemTop}><span className={s.itemName}>{x.nombre}</span></div>
+                  <span className={s.itemMeta}>{x.documento} · {x.ciudad}{x.nuevo ? " · nuevo" : ""}</span>
+                  <div className={s.itemSub}>{x.antes || "Sin sede"} → <b>{x.despues}</b></div>
+                </div>
+              ))}
+            </details>
+          )}
+
           {plan.errores.length > 0 && (
             <details id="errores" className={s.section} open>
               <summary><span className={s.secTitle}><i className={s.dot} style={{ background: "var(--red-ink)" }} />Errores ({plan.errores.length})</span></summary>
@@ -258,7 +273,7 @@ export default function ImportPanel({ user }: { user: SessionUser }) {
 
           <div className={s.bar}>
             <div className={s.barText}>
-              {nada ? "No hay nada que aplicar." : <>Se crearán <b>{plan.nuevos.length}</b> · se actualizarán <b>{plan.cambiados.length}</b> · se eliminarán <b>{eliminar.size}</b></>}
+              {nada ? "No hay nada que aplicar." : <>Se crearán <b>{plan.nuevos.length}</b> · se actualizarán <b>{plan.cambiados.length}</b> · se eliminarán <b>{eliminar.size}</b>{plan.sedes?.length ? <> · sedes <b>{plan.sedes.length}</b></> : null}</>}
             </div>
             <button type="button" className="btn btn-primary" disabled={!!nada} onClick={() => setConfirmar(true)}>Aplicar cambios</button>
           </div>
@@ -274,6 +289,7 @@ export default function ImportPanel({ user }: { user: SessionUser }) {
               <li>{n(plan.cambiados.length, "pendiente actualizado", "pendientes actualizados")}</li>
               <li>{n(eliminar.size, "eliminado", "eliminados")}</li>
               <li>{n(plan.protegidos.length, "validado o corregido queda como está", "validados o corregidos quedan como están")}</li>
+              {plan.sedes?.length > 0 && <li>{n(plan.sedes.length, "sede asignada", "sedes asignadas")}</li>}
             </ul>
             {eliminar.size > 0 && (
               <div className={s.warn}>

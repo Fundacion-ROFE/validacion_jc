@@ -36,18 +36,20 @@ export type Permiso =
   | "clausura_resumen"                // avance por ciudad (monitor: solo sus ciudades; coordinación y admin: todas)
   | "clausura_gestionar"               // crear/editar eventos, abrir/cerrar, reabrir respuestas (solo admin)
   // Estado activo/inactivo del estudiante (students + testimonios_participantes). Todos ven la etiqueta y el filtro.
-  | "estudiantes_activo";              // inactivar y reactivar (solo admin)
+  | "estudiantes_activo"               // inactivar y reactivar (solo admin)
+  // Sede dentro de la ciudad (Uruguay → Colonia / Paysandú). Única escritura que puede hacer coordinación.
+  | "estudiantes_sede";                // asignar o cambiar la sede (monitor: solo sus ciudades; coordinación y admin: todas)
 
 const ENCUESTA_MONITOR: readonly Permiso[] = ["encuesta_ver", "encuesta_comentar"];
 const CLAUSURA_TODOS: readonly Permiso[] = ["clausura_ver", "clausura_comentar", "clausura_exportar", "clausura_resumen"];
 
 const PERMISOS: Record<RolUsuario, readonly Permiso[]> = {
-  monitor: ["testimonios_ver", "testimonios_comentar", "testimonios_exportar_pendientes", ...ENCUESTA_MONITOR, ...CLAUSURA_TODOS],
+  monitor: ["testimonios_ver", "testimonios_comentar", "testimonios_exportar_pendientes", ...ENCUESTA_MONITOR, ...CLAUSURA_TODOS, "estudiantes_sede"],
   coordinador: ["ver_todas_las_ciudades", "ver_resumen", "descargar_excel", "ver_historial", "testimonios_ver", "testimonios_comentar", "testimonios_exportar_pendientes", "testimonios_resumen",
-    ...ENCUESTA_MONITOR, "encuesta_resumen", ...CLAUSURA_TODOS],
+    ...ENCUESTA_MONITOR, "encuesta_resumen", ...CLAUSURA_TODOS, "estudiantes_sede"],
   admin: ["ver_todas_las_ciudades", "ver_resumen", "descargar_excel", "ver_historial", "subir_lista", "gestionar_usuarios", "editar_todo", "exportar_pendientes",
     "testimonios_ver", "testimonios_comentar", "testimonios_subir_lista", "testimonios_sin_duenio", "testimonios_exportar_pendientes", "testimonios_resumen",
-    ...ENCUESTA_MONITOR, "encuesta_resumen", "encuesta_sin_coincidencia", ...CLAUSURA_TODOS, "clausura_gestionar", "estudiantes_activo"],
+    ...ENCUESTA_MONITOR, "encuesta_resumen", "encuesta_sin_coincidencia", ...CLAUSURA_TODOS, "clausura_gestionar", "estudiantes_activo", "estudiantes_sede"],
 };
 
 export function puede(rol: string | undefined, permiso: Permiso): boolean {

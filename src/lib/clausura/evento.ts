@@ -9,6 +9,7 @@ import { aplicarAcompanante, MODOS_ACOMPANANTE, type ModoAcompanante } from "./f
 import { aplicarProyecto, MODOS_PROYECTO, type ModoProyecto } from "./formulario/proyecto";
 import { reemplazar, resolverTextos, type Variables } from "./formulario/variables";
 import { sinMarcadores, textoQuedan } from "./presentacion";
+import { cubre } from "@/lib/sede";
 
 const fold = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
 export const mismaCiudad = (a: string, b: string) => fold(a) === fold(b);
@@ -154,11 +155,12 @@ export function aceptaRespuestas(e: Pick<Evento, "estado" | "fechaLimite">, ahor
 }
 
 /**
- * Evento de la ciudad del estudiante: el abierto (si hay varios, el más próximo); si no hay abierto, el cerrado más
+ * Evento de la ciudad (y sede) del estudiante: el abierto (si hay varios, el más próximo); si no hay abierto, el cerrado más
  * reciente (para que quien ya respondió vea sus respuestas). Los borradores nunca.
+ * Un evento que cubre "Uruguay" sirve a todo Uruguay; uno que cubre "Uruguay · Colonia", solo a quien tiene esa sede.
  */
-export function eventoParaCiudad<T extends Pick<Evento, "estado" | "ciudades" | "inicio">>(eventos: T[], ciudad: string): T | null {
-  const suyos = eventos.filter((e) => e.estado !== "borrador" && e.ciudades.some((c) => mismaCiudad(c, ciudad)));
+export function eventoParaCiudad<T extends Pick<Evento, "estado" | "ciudades" | "inicio">>(eventos: T[], ciudad: string, sede?: string | null): T | null {
+  const suyos = eventos.filter((e) => e.estado !== "borrador" && cubre(e.ciudades, ciudad, sede));
   const abiertos = suyos.filter((e) => e.estado === "abierto").sort((a, b) => +a.inicio - +b.inicio);
   if (abiertos.length) return abiertos[0]!;
   return suyos.sort((a, b) => +b.inicio - +a.inicio)[0] ?? null;

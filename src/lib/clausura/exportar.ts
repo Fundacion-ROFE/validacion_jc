@@ -1,6 +1,7 @@
 // Excel de respuestas de la clausura, como la descarga de Google Forms: una fila por estudiante y una columna por
 // pregunta (encabezado = texto de la pregunta). Casillas unidas con ", ", "Otro: <texto>", preguntas saltadas en blanco.
 // Hoja "Preguntas" con el ID, el evento, la sección, el texto y el tipo. Solo LEE. Monitor: solo sus ciudades.
+import { sedeDe } from "@/lib/sede";
 import ExcelJS from "exceljs";
 import { ObjectId } from "mongodb";
 import { filtroActivos } from "@/lib/activo";
@@ -17,7 +18,7 @@ const ESTADO = { enviada: "Respondió", en_progreso: "En progreso" } as const;
 const fecha = (d: Date | null | undefined) => (d ? d.toLocaleString("es-CO", { timeZone: "America/Bogota", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : "");
 
 type Columna = { id: string; titulo: string };
-type FilaExcel = { base: string[]; r: RespuestaClausura | undefined; preguntas: Map<string, Pregunta> };
+type FilaExcel = { base: string[]; r: RespuestaClausura | undefined; preguntas: Map<string, Pregunta>; sede: string };
 
 export async function excelClausura(user: Pick<SessionUser, "rol" | "ciudades">, opciones: { evento: string; sinResponder: boolean; incluirInactivos?: boolean }) {
   const { eventos, estudiantes, respuestas, comentarios } = await clausura();
@@ -31,8 +32,8 @@ export async function excelClausura(user: Pick<SessionUser, "rol" | "ciudades">,
   const filas: FilaExcel[] = [];
 
   for (const e of lista) {
-    const alumnos = (await estudiantes.find({ ...alcanceEvento(e, user), ...filtroActivos(!!opciones.incluirInactivos) }, { projection: { documento: 1, nombre: 1, nombrePropuesto: 1, ciudad: 1, grupo: 1, correo: 1, correoPropuesto: 1 } })
-      .sort({ ciudad: 1, nombre: 1 }).toArray()) as Pick<Student, "_id" | "documento" | "nombre" | "nombrePropuesto" | "ciudad" | "grupo" | "correo" | "correoPropuesto">[];
+    const alumnos = (await estudiantes.find({ ...alcanceEvento(e, user), ...filtroActivos(!!opciones.incluirInactivos) }, { projection: { documento: 1, nombre: 1, nombrePropuesto: 1, ciudad: 1, sede: 1, grupo: 1, correo: 1, correoPropuesto: 1 } })
+      .sort({ ciudad: 1, nombre: 1 }).toArray()) as Pick<Student, "_id" | "documento" | "nombre" | "nombrePropuesto" | "ciudad" | "sede" | "grupo" | "correo" | "correoPropuesto">[];
     const resp = await respuestas.find({ eventoId: e._id, studentId: { $in: alumnos.map((a) => a._id) } }).toArray();
     const porAlumno = new Map(resp.map((r) => [r.studentId.toHexString(), r]));
     const notas = await comentarios.find({ eventoId: e._id, studentId: { $in: alumnos.map((a) => a._id) } }).sort({ fecha: 1 }).toArray();
@@ -56,7 +57,7 @@ export async function excelClausura(user: Pick<SessionUser, "rol" | "ciudades">,
       const proy = proyectoDe(e, f, r);
       const notasDe = notas.filter((n) => n.studentId.equals(a._id)).map((n) => `${fecha(n.fecha)} · ${n.autor.nombre}: ${n.texto}`).join("\n");
       filas.push({
-        r, preguntas,
+        r, preguntas, sede: sedeDe(a) ?? "",
         base: [
           `${e.titulo} · ${e.nombreVisible}`, a.ciudad, a.documento, a.nombrePropuesto ?? a.nombre, a.grupo ?? "",
           r ? ESTADO[r.estado] : "Sin responder",
@@ -76,14 +77,15 @@ export async function excelClausura(user: Pick<SessionUser, "rol" | "ciudades">,
   const hoja = libro.addWorksheet("Respuestas", { views: [{ state: "frozen", ySplit: 1, xSplit: 4 }] });
   const fijas = ["Evento", "Ciudad", "Documento", "Nombre", "Grupo", "Estado", "Asistencia", "Presenta proyecto", "Correo original", "¿Confirmó el correo?", "Correo nuevo",
     "Celular", "WhatsApp", "Género", "Inicio", "Envío", "Última edición", "Reabierta por", "Comentarios del monitor"];
-  hoja.addRow([...fijas, ...columnas.map((c) => c.titulo)]);
+  hoja.addRow([...fijas, ...columnas.map((c) => c.titulo), "Sede"]);
   for (const fila of filas) {
     const r = fila.r?.respuestas;
     const valores = columnas.map((c) => {
       const p = fila.preguntas.get(c.id);
       return p && r ? textoRespuesta(p, r[c.id], r[claveOtro(c.id)]) : "";
     });
-    hoja.addRow([...fila.base, ...valores]);
+    // "Sede" va al final de todo, para no correr ninguna columna de antes.
+    hoja.addRow([...fila.base, ...valores, fila.sede]);
   }
   hoja.getRow(1).font = { bold: true };
   hoja.columns.forEach((col, i) => { col.width = i < fijas.length ? 18 : 34; });

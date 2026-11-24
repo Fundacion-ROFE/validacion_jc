@@ -5,7 +5,8 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import plantillaArchivo from "../../../eventos/cali.json";
 import { clausura, type Evento } from "./db";
-import { datosDesdeArchivo, EventoArchivo, mismaCiudad, pendientesDe, POR_DEFINIR, revisarEventoArchivo, TIPOS_EVENTO } from "./evento";
+import { datosDesdeArchivo, EventoArchivo, pendientesDe, POR_DEFINIR, revisarEventoArchivo, TIPOS_EVENTO } from "./evento";
+import { seSolapan } from "@/lib/sede";
 import { Formulario } from "./formulario/esquema";
 import { validarFormulario } from "./formulario/motor";
 import { MODOS_ACOMPANANTE } from "./formulario/acompanante";
@@ -91,11 +92,11 @@ function validar(d: DatosEvento, base: { formulario: Formulario; preguntaAsisten
   return errores.length ? { errores } : { datos: datosDesdeArchivo(r.data) };
 }
 
-/** ¿Hay otro evento abierto para alguna de esas ciudades? */
+/** ¿Hay otro evento abierto que cubra a alguien de esas ciudades? ("Uruguay" choca con "Uruguay · Colonia"; las dos sedes no chocan). */
 async function choque(slug: string, ciudades: string[]): Promise<string | null> {
   const { eventos } = await clausura();
   const otros = await eventos.find({ estado: "abierto", slug: { $ne: slug } }, { projection: { slug: 1, ciudades: 1 } }).toArray();
-  return otros.find((o) => o.ciudades.some((c) => ciudades.some((x) => mismaCiudad(c, x))))?.slug ?? null;
+  return otros.find((o) => seSolapan(o.ciudades, ciudades))?.slug ?? null;
 }
 
 export async function crearEvento(body: z.infer<typeof NuevoEvento>, por: string): Promise<Resultado> {
